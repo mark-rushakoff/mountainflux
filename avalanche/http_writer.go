@@ -2,8 +2,8 @@ package avalanche
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net/http"
+
+	"github.com/valyala/fasthttp"
 )
 
 type HTTPWriterConfig struct {
@@ -13,29 +13,42 @@ type HTTPWriterConfig struct {
 }
 
 type HTTPWriter struct {
-	c HTTPWriterConfig
+	client fasthttp.Client
+
+	c   HTTPWriterConfig
+	url []byte
 }
 
 func NewHTTPWriter(c HTTPWriterConfig) Writer {
-	return &HTTPWriter{c: c}
+	return &HTTPWriter{
+		client: fasthttp.Client{
+			Name: "avalanche",
+		},
+
+		c:   c,
+		url: []byte(c.Host + "/write"),
+	}
 }
 
+var post = []byte("POST")
+
 func (w *HTTPWriter) Write() error {
-	g := w.c.Generator()
+	req := fasthttp.AcquireRequest()
+	req.Header.SetMethodBytes(post)
+	req.Header.SetRequestURIBytes(w.url)
+	req.SetBodyStream(w.c.Generator(), -1)
 
-	resp, err := http.Post(w.c.Host+"/write", "", g)
-	if err != nil {
-		return err
+	resp := fasthttp.AcquireResponse()
+	err := w.client.Do(req, resp)
+	if err == nil {
+		sc := resp.StatusCode()
+		if sc != fasthttp.StatusNoContent {
+			err = fmt.Errorf("Invalid write response (status %d): %s", sc, resp.Body())
+		}
 	}
 
-	// NoContent is the only acceptable status.
-	// OK responses can have errors, and non-200 is another class of error.
-	if resp.StatusCode != http.StatusNoContent {
-		// Already received invalid status code,
-		// don't care if something goes wrong reading the response body
-		b, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("Invalid write response (status %d): %s", resp.StatusCode, b)
-	}
+	fasthttp.ReleaseResponse(resp)
+	fasthttp.ReleaseRequest(req)
 
-	return nil
+	return err
 }
