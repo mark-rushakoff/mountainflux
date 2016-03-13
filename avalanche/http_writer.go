@@ -21,6 +21,7 @@ type HTTPWriter struct {
 	url []byte
 }
 
+// NewHTTPWriter returns a new HTTPWriter from the supplied HTTPWriterConfig.
 func NewHTTPWriter(c HTTPWriterConfig) Writer {
 	return &HTTPWriter{
 		client: fasthttp.Client{
