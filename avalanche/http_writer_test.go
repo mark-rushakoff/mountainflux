@@ -14,17 +14,21 @@ func TestHTTPWriter_Write(t *testing.T) {
 
 	var lastReq string
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/write" && r.Method == "POST" {
+		if r.URL.Path == "/write" && r.Method == "POST" && r.URL.Query().Get("db") == "mydb" {
 			b, _ := ioutil.ReadAll(r.Body)
 			lastReq = string(b)
 			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("Unexpected URL: " + r.URL.String()))
 		}
 	})
 	s := httptest.NewServer(h)
 	defer s.Close()
 
 	c := avalanche.HTTPWriterConfig{
-		Host: s.URL,
+		Host:     s.URL,
+		Database: "mydb",
 		Generator: func() []byte {
 			return line
 		},

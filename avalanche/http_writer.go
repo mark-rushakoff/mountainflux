@@ -2,12 +2,14 @@ package avalanche
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/valyala/fasthttp"
 )
 
 type HTTPWriterConfig struct {
-	Host string
+	Host     string
+	Database string
 
 	Generator Generator
 }
@@ -26,7 +28,7 @@ func NewHTTPWriter(c HTTPWriterConfig) Writer {
 		},
 
 		c:   c,
-		url: []byte(c.Host + "/write"),
+		url: []byte(c.Host + "/write?db=" + url.QueryEscape(c.Database)),
 	}
 }
 
