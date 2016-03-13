@@ -2,10 +2,22 @@
 
 Tools to generate workloads against InfluxDB.
 
-## avalanche
+## Packages
+
+### avalanche
 
 InfluxDB client capable of generating workloads for InfluxDB.
 
-## chasm
+### chasm
 
-API-compatible InfluxDB server to be used for benchmarking avalanche.
+API-compatible InfluxDB server to be used for benchmarking avalanche or other InfluxDB clients.
+
+## Commands
+
+### avalanched
+
+Experimental load generator using `avalanche`.
+
+### chasmd
+
+Command-line-accessible chasm server that will log out statistics around writes consumed.
