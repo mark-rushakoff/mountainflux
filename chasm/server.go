@@ -26,9 +26,10 @@ type HTTPConfig struct {
 type Server struct {
 	HTTPURL string
 
-	httpListener      net.Listener
-	httpLinesAccepted uint64
-	httpBytesAccepted uint64
+	httpListener         net.Listener
+	httpRequestsAccepted uint64
+	httpLinesAccepted    uint64
+	httpBytesAccepted    uint64
 
 	wg   sync.WaitGroup
 	quit chan struct{}
@@ -66,6 +67,11 @@ func (s *Server) Close() {
 	s.wg.Wait()
 }
 
+// HTTPRequestsAccepted returns the count of the number of requests accepted over HTTP.
+func (s *Server) HTTPRequestsAccepted() uint64 {
+	return atomic.LoadUint64(&s.httpRequestsAccepted)
+}
+
 // HTTPBytesAccepted returns the count of the number of bytes accepted over HTTP.
 func (s *Server) HTTPBytesAccepted() uint64 {
 	return atomic.LoadUint64(&s.httpBytesAccepted)
@@ -99,6 +105,7 @@ func (s *Server) serveHTTP() {
 }
 
 func (s *Server) fasthttpHandler(ctx *fasthttp.RequestCtx) {
+	atomic.AddUint64(&s.httpRequestsAccepted, 1)
 	if !ctx.IsPost() || !bytes.Equal(ctx.Path(), writePath) {
 		ctx.Response.SetStatusCode(fasthttp.StatusNotFound)
 		return

@@ -39,7 +39,10 @@ func main() {
 		case <-ctrlC:
 			shutdown(s)
 		case <-statTicker.C:
-			logger.Printf("http_bytes_accepted=%d http_lines_accepted=%d\n", s.HTTPBytesAccepted(), s.HTTPLinesAccepted())
+			logger.Printf(
+				"http_requests_accepted=%d http_bytes_accepted=%d http_lines_accepted=%d\n",
+				s.HTTPRequestsAccepted(), s.HTTPBytesAccepted(), s.HTTPLinesAccepted(),
+			)
 		}
 	}
 }
