@@ -24,11 +24,11 @@ func main() {
 
 	s, err := chasm.NewServer(c)
 	if err != nil {
-		logger.Fatal("Unexpected error: " + err.Error())
+		logger.Fatal("Unexpected error:", err.Error())
 	}
 
 	s.Serve()
-	logger.Println("HTTP server listening on " + s.HTTPURL)
+	logger.Println("HTTP server listening on", s.HTTPURL)
 
 	ctrlC := make(chan os.Signal, 1)
 	signal.Notify(ctrlC, os.Interrupt)

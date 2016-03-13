@@ -77,10 +77,10 @@ func (c *counter) Generate() []byte {
 		fmt.Fprintf(&c.lineBuf, "%di %d\n", c.ctr, time.Now().UnixNano())
 		c.ctr++
 
-		if c.writeBuf.Len()+c.lineBuf.Len() > c.writeBuf.Cap() {
-			return c.writeBuf.Bytes()
-		} else {
+		if c.writeBuf.Len()+c.lineBuf.Len() <= c.writeBuf.Cap() {
 			c.writeBuf.Write(c.lineBuf.Bytes())
+		} else {
+			return c.writeBuf.Bytes()
 		}
 	}
 }
