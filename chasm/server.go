@@ -3,6 +3,7 @@ package chasm
 import (
 	"bytes"
 	"net"
+	"sync"
 	"sync/atomic"
 
 	"github.com/valyala/fasthttp"
@@ -29,9 +30,11 @@ type Server struct {
 	httpLinesAccepted uint64
 	httpBytesAccepted uint64
 
+	wg   sync.WaitGroup
 	quit chan struct{}
 }
 
+// NewServer returns a new Server based on the supplied Config.
 func NewServer(c Config) (*Server, error) {
 	s := &Server{
 		quit: make(chan struct{}),
@@ -49,20 +52,26 @@ func NewServer(c Config) (*Server, error) {
 	return s, nil
 }
 
+// Server starts all the configured sub-servers in their own goroutines.
 func (s *Server) Serve() {
 	if s.httpListener != nil {
+		s.wg.Add(1)
 		go s.serveHTTP()
 	}
 }
 
+// Close attempts to gracefully shutdown all the started sub-servers.
 func (s *Server) Close() {
 	close(s.quit)
+	s.wg.Wait()
 }
 
+// HTTPBytesAccepted returns the count of the number of bytes accepted over HTTP.
 func (s *Server) HTTPBytesAccepted() uint64 {
 	return atomic.LoadUint64(&s.httpBytesAccepted)
 }
 
+// HTTPLinesAccepted returns the count of the number of lines accepted over HTTP.
 func (s *Server) HTTPLinesAccepted() uint64 {
 	return atomic.LoadUint64(&s.httpLinesAccepted)
 }
@@ -86,6 +95,7 @@ func (s *Server) serveHTTP() {
 
 	<-s.quit
 	s.httpListener.Close()
+	s.wg.Done()
 }
 
 func (s *Server) fasthttpHandler(ctx *fasthttp.RequestCtx) {
