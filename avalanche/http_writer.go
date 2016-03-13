@@ -36,7 +36,7 @@ func (w *HTTPWriter) Write() error {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethodBytes(post)
 	req.Header.SetRequestURIBytes(w.url)
-	req.SetBodyStream(w.c.Generator(), -1)
+	req.SetBody(w.c.Generator())
 
 	resp := fasthttp.AcquireResponse()
 	err := w.client.Do(req, resp)

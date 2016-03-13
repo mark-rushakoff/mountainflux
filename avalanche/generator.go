@@ -1,5 +1,3 @@
 package avalanche
 
-import "io"
-
-type Generator func() io.Reader
+type Generator func() []byte
