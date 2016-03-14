@@ -9,11 +9,6 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var (
-	writePath     = []byte("/write")
-	lineDelimiter = []byte("\n")
-)
-
 type Config struct {
 	HTTPConfig *HTTPConfig
 }
@@ -24,6 +19,8 @@ type HTTPConfig struct {
 }
 
 type Server struct {
+	// HTTPURL is the full address of this server after binding to the configured address,
+	// e.g. "http://example.com:8086"
 	HTTPURL string
 
 	httpListener         net.Listener
@@ -104,10 +101,28 @@ func (s *Server) serveHTTP() {
 	s.wg.Done()
 }
 
+var (
+	lineDelimiter    = []byte("\n")
+	writePath        = []byte("/write")
+	dbKey            = []byte("db")
+	missingDbMessage = []byte("database is required")
+)
+
 func (s *Server) fasthttpHandler(ctx *fasthttp.RequestCtx) {
 	atomic.AddUint64(&s.httpRequestsAccepted, 1)
-	if !ctx.IsPost() || !bytes.Equal(ctx.Path(), writePath) {
+	if !bytes.Equal(ctx.Path(), writePath) {
 		ctx.Response.SetStatusCode(fasthttp.StatusNotFound)
+		return
+	}
+
+	if !ctx.IsPost() {
+		ctx.Response.SetStatusCode(fasthttp.StatusMethodNotAllowed)
+		return
+	}
+
+	if args := ctx.QueryArgs(); args == nil || len(args.PeekBytes(dbKey)) == 0 {
+		ctx.Response.SetStatusCode(fasthttp.StatusBadRequest)
+		ctx.Response.SetBody(missingDbMessage)
 		return
 	}
 
