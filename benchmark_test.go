@@ -22,17 +22,15 @@ func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
 
 	lines := bytes.Repeat([]byte("cpu,host=h1 usage=99\n"), numLines)
 	w := avalanche.NewHTTPWriter(avalanche.HTTPWriterConfig{
-		Host: s.HTTPURL,
-		Generator: func() []byte {
-			return lines
-		},
+		Host:     s.HTTPURL,
+		Database: "d",
 	})
 
 	var expBytes, expLines uint64
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		if err := w.Write(); err != nil {
+		if err := w.WriteLineProtocol(lines); err != nil {
 			b.Fatalf("expected no error, got %s", err.Error())
 		}
 		b.SetBytes(int64(len(lines)))

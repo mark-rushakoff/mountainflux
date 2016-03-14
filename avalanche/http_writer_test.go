@@ -29,13 +29,10 @@ func TestHTTPWriter_Write(t *testing.T) {
 	c := avalanche.HTTPWriterConfig{
 		Host:     s.URL,
 		Database: "mydb",
-		Generator: func() []byte {
-			return line
-		},
 	}
 	w := avalanche.NewHTTPWriter(c)
 
-	if err := w.Write(); err != nil {
+	if err := w.WriteLineProtocol(line); err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
 	}
 

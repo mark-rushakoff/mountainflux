@@ -10,8 +10,6 @@ import (
 type HTTPWriterConfig struct {
 	Host     string
 	Database string
-
-	Generator Generator
 }
 
 type HTTPWriter struct {
@@ -22,7 +20,7 @@ type HTTPWriter struct {
 }
 
 // NewHTTPWriter returns a new HTTPWriter from the supplied HTTPWriterConfig.
-func NewHTTPWriter(c HTTPWriterConfig) Writer {
+func NewHTTPWriter(c HTTPWriterConfig) LineProtocolWriter {
 	return &HTTPWriter{
 		client: fasthttp.Client{
 			Name: "avalanche",
@@ -35,11 +33,11 @@ func NewHTTPWriter(c HTTPWriterConfig) Writer {
 
 var post = []byte("POST")
 
-func (w *HTTPWriter) Write() error {
+func (w *HTTPWriter) WriteLineProtocol(body []byte) error {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethodBytes(post)
 	req.Header.SetRequestURIBytes(w.url)
-	req.SetBody(w.c.Generator())
+	req.SetBody(body)
 
 	resp := fasthttp.AcquireResponse()
 	err := w.client.Do(req, resp)

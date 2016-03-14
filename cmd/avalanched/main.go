@@ -27,15 +27,13 @@ func main() {
 	c := avalanche.HTTPWriterConfig{
 		Host:     "http://" + *url,
 		Database: *database,
-
-		Generator: newCounter(*bufSize).Generate,
 	}
 
 	w := avalanche.NewHTTPWriter(c)
 
 	logger.Println("Beginning writes to", c.Host)
 	done := make(chan struct{})
-	go write(w, done)
+	go write(*bufSize, w, done)
 
 	ctrlC := make(chan os.Signal, 1)
 	signal.Notify(ctrlC, os.Interrupt)
@@ -46,6 +44,20 @@ func main() {
 			close(done)
 
 			os.Exit(0)
+		}
+	}
+}
+
+func write(bufSize int, w avalanche.LineProtocolWriter, done chan struct{}) {
+	c := newCounter(bufSize)
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			if err := w.WriteLineProtocol(c.makeBatch()); err != nil {
+				logger.Println("write error:", err.Error())
+			}
 		}
 	}
 }
@@ -65,7 +77,7 @@ func newCounter(bufSize int) *counter {
 	}
 }
 
-func (c *counter) Generate() []byte {
+func (c *counter) makeBatch() []byte {
 	c.writeBuf.Reset()
 	if c.lineBuf.Len() > 0 {
 		c.writeBuf.Write(c.lineBuf.Bytes())
@@ -81,19 +93,6 @@ func (c *counter) Generate() []byte {
 			c.writeBuf.Write(c.lineBuf.Bytes())
 		} else {
 			return c.writeBuf.Bytes()
-		}
-	}
-}
-
-func write(w avalanche.Writer, done chan struct{}) {
-	for {
-		select {
-		case <-done:
-			return
-		default:
-			if err := w.Write(); err != nil {
-				logger.Println("write error:", err.Error())
-			}
 		}
 	}
 }

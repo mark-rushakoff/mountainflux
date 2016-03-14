@@ -1,5 +1,5 @@
 package avalanche
 
-type Writer interface {
-	Write() error
+type LineProtocolWriter interface {
+	WriteLineProtocol([]byte) error
 }
