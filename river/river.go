@@ -47,9 +47,11 @@ func WriteLine(w io.Writer, seriesKey []byte, fields []Field, time int64) error 
 	}
 	buf.WriteByte(' ')
 
-	// Timestamp in nanoseconds, formatted in base 10, should fit in exactly 19 bytes for the foreseeable future
-	tsBuf := make([]byte, 0, 19)
+	// Timestamp in nanoseconds, formatted in base 10, should fit in exactly 19 bytes for the foreseeable future.
+	// Plus one byte for the trailing newline.
+	tsBuf := make([]byte, 0, 20)
 	tsBuf = strconv.AppendInt(tsBuf, time, 10)
+	tsBuf = append(tsBuf, '\n')
 	buf.Write(tsBuf)
 
 	if _, err := io.Copy(w, &buf); err != nil {

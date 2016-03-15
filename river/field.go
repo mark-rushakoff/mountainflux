@@ -14,14 +14,18 @@ type Bool struct {
 	Value bool
 }
 
+var (
+	eqTrue  = []byte("=T")
+	eqFalse = []byte("=F")
+)
+
 func (b Bool) writeToBuf(buf *bytes.Buffer) {
 	buf.Write(b.Name)
-	buf.WriteByte('=')
 
 	if b.Value {
-		buf.WriteByte('T')
+		buf.Write(eqTrue)
 	} else {
-		buf.WriteByte('F')
+		buf.Write(eqFalse)
 	}
 }
 
@@ -32,13 +36,15 @@ type Int struct {
 
 func (i Int) writeToBuf(buf *bytes.Buffer) {
 	buf.Write(i.Name)
-	buf.WriteByte('=')
 
-	// Max int64 fits in 19 base-10 digits
-	iBuf := make([]byte, 0, 19)
+	// Max int64 fits in 19 base-10 digits;
+	// plus 1 for the leading =, plus 1 for the trailing i required for ints.
+	iBuf := make([]byte, 1, 21)
+	iBuf[0] = '='
 	iBuf = strconv.AppendInt(iBuf, i.Value, 10)
+	iBuf = append(iBuf, 'i')
+
 	buf.Write(iBuf)
-	buf.WriteByte('i')
 }
 
 type Float struct {

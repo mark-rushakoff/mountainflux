@@ -21,7 +21,7 @@ func TestRiver_WriteLine(t *testing.T) {
 	}, int64(1435362189575692182))
 
 	// Tag keys are alphabetized, fields are taken in order, time as entered
-	exp := `rooms,building=b1,room=r1 lights=T,occupants=3i,temp_f=72.5,meeting_name=bikeshed 1435362189575692182`
+	exp := `rooms,building=b1,room=r1 lights=T,occupants=3i,temp_f=72.5,meeting_name=bikeshed 1435362189575692182` + "\n"
 
 	got := string(b.Bytes())
 	if got != exp {
