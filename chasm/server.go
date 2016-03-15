@@ -1,3 +1,4 @@
+// Package chasm provides an API-compatible InfluxDB server where you can throw all your writes into a bottomless pit.
 package chasm
 
 import (

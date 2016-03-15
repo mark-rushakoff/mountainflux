@@ -1,3 +1,4 @@
+// Package river carves through the mountains to write your points.
 package river
 
 import (
@@ -8,7 +9,8 @@ import (
 	"strconv"
 )
 
-// Non-optimized way to create a key.
+// SeriesKey is a non-optimized way to create a series key for the line protocol,
+// i.e. a measurement with tag keys and values.
 func SeriesKey(measurement string, tags map[string]string) []byte {
 	var b bytes.Buffer
 	b.WriteString(measurement)

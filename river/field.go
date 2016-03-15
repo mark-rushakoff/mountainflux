@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+// Field represents an InfluxDB field to be serialized by river.WriteLine.
+// The Bool, Int, Float, and String types implement this interface.
 type Field interface {
 	writeToBuf(*bytes.Buffer)
 }

@@ -1,3 +1,4 @@
+// Package avalanche creates a massive amount of writes against your target InfluxDB instance.
 package avalanche
 
 import (
@@ -33,6 +34,7 @@ func NewHTTPWriter(c HTTPWriterConfig) LineProtocolWriter {
 
 var post = []byte("POST")
 
+// WriteLineProtocol writes the given byte slice to the HTTP server described in the Writer's HTTPWriterConfig.
 func (w *HTTPWriter) WriteLineProtocol(body []byte) error {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethodBytes(post)
