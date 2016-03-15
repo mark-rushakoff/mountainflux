@@ -12,6 +12,10 @@ InfluxDB client capable of generating workloads for InfluxDB.
 
 API-compatible InfluxDB server to be used for benchmarking avalanche or other InfluxDB clients.
 
+### river
+
+Efficiently generate points in line protocol format.
+
 ## Commands
 
 ### avalanched
