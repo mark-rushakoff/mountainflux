@@ -1,6 +1,7 @@
 # mountainflux
 
 [![GoDoc](https://godoc.org/github.com/mark-rushakoff/mountainflux?status.svg)](https://godoc.org/github.com/mark-rushakoff/mountainflux)
+[![Circle CI](https://circleci.com/gh/mark-rushakoff/mountainflux.svg?style=svg)](https://circleci.com/gh/mark-rushakoff/mountainflux)
 
 Tools to generate workloads against InfluxDB.
 
