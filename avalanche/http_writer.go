@@ -8,11 +8,16 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// HTTPWriterConfig is the configuration used to create an HTTPWriter.
 type HTTPWriterConfig struct {
-	Host     string
+	// URL of the host, in form "http://example.com:8086"
+	Host string
+
+	// Name of the target database into which points will be written.
 	Database string
 }
 
+// HTTPWriter is a Writer that writes to an InfluxDB HTTP server.
 type HTTPWriter struct {
 	client fasthttp.Client
 

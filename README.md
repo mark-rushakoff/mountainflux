@@ -1,5 +1,7 @@
 # mountainflux
 
+[![GoDoc](https://godoc.org/github.com/mark-rushakoff/mountainflux?status.svg)](https://godoc.org/github.com/mark-rushakoff/mountainflux)
+
 Tools to generate workloads against InfluxDB.
 
 ## Packages

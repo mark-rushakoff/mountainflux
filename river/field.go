@@ -11,6 +11,7 @@ type Field interface {
 	writeToBuf(*bytes.Buffer)
 }
 
+// Bool represents a boolean InfluxDB field.
 type Bool struct {
 	Name  []byte
 	Value bool
@@ -31,6 +32,7 @@ func (b Bool) writeToBuf(buf *bytes.Buffer) {
 	}
 }
 
+// Int represents an integer InfluxDB field.
 type Int struct {
 	Name  []byte
 	Value int64
@@ -49,6 +51,7 @@ func (i Int) writeToBuf(buf *bytes.Buffer) {
 	buf.Write(iBuf)
 }
 
+// Float represents a floating point InfluxDB field.
 type Float struct {
 	Name  []byte
 	Value float64
@@ -64,6 +67,7 @@ func (f Float) writeToBuf(buf *bytes.Buffer) {
 	buf.Write(fBuf)
 }
 
+// String represents a string InfluxDB field.
 type String struct {
 	Name  []byte
 	Value []byte

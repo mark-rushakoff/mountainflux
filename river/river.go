@@ -16,7 +16,7 @@ func SeriesKey(measurement string, tags map[string]string) []byte {
 	b.WriteString(measurement)
 
 	keys := make([]string, 0, len(tags))
-	for k, _ := range tags {
+	for k := range tags {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

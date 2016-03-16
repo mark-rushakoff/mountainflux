@@ -10,17 +10,20 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// Config describes all the configuration for a Server.
 type Config struct {
 	HTTPConfig *HTTPConfig
 }
 
+// HTTPConfig describes the configuration for an HTTP server.
 type HTTPConfig struct {
 	// TCP address to listen to, e.g. `:8086` or `0.0.0.0:8086`
 	Bind string
 }
 
+// Server is a fake InfluxDB server.
 type Server struct {
-	// HTTPURL is the full address of this server after binding to the configured address,
+	// HTTPURL is the read-only full address of this server after binding to the configured address,
 	// e.g. "http://example.com:8086"
 	HTTPURL string
 
@@ -51,7 +54,7 @@ func NewServer(c Config) (*Server, error) {
 	return s, nil
 }
 
-// Server starts all the configured sub-servers in their own goroutines.
+// Serve starts all the configured sub-servers in their own goroutines.
 func (s *Server) Serve() {
 	if s.httpListener != nil {
 		s.wg.Add(1)
