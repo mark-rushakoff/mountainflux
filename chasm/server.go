@@ -68,19 +68,20 @@ func (s *Server) Close() {
 	s.wg.Wait()
 }
 
-// HTTPRequestsAccepted returns the count of the number of requests accepted over HTTP.
-func (s *Server) HTTPRequestsAccepted() uint64 {
-	return atomic.LoadUint64(&s.httpRequestsAccepted)
+// Stats contains information about the load the server has accepted.
+type Stats struct {
+	RequestsAccepted uint64
+	BytesAccepted    uint64
+	LinesAccepted    uint64
 }
 
-// HTTPBytesAccepted returns the count of the number of bytes accepted over HTTP.
-func (s *Server) HTTPBytesAccepted() uint64 {
-	return atomic.LoadUint64(&s.httpBytesAccepted)
-}
-
-// HTTPLinesAccepted returns the count of the number of lines accepted over HTTP.
-func (s *Server) HTTPLinesAccepted() uint64 {
-	return atomic.LoadUint64(&s.httpLinesAccepted)
+// HTTPStats returns stats for the HTTP server contained in this Server.
+func (s *Server) HTTPStats() Stats {
+	return Stats{
+		RequestsAccepted: atomic.LoadUint64(&s.httpRequestsAccepted),
+		BytesAccepted:    atomic.LoadUint64(&s.httpBytesAccepted),
+		LinesAccepted:    atomic.LoadUint64(&s.httpLinesAccepted),
+	}
 }
 
 func (s *Server) serveHTTP() {

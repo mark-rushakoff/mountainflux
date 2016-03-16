@@ -1,20 +1,58 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
+	"github.com/mark-rushakoff/mountainflux/avalanche"
 	"github.com/mark-rushakoff/mountainflux/chasm"
+	"github.com/mark-rushakoff/mountainflux/river"
 )
 
-var logger = log.New(os.Stdout, "[chasmd] ", log.LstdFlags)
+var (
+	logger = log.New(os.Stdout, "[chasmd] ", log.LstdFlags)
+
+	bind           = flag.String("httpbind", "0.0.0.0:8086", "TCP bind address for chasm HTTP server")
+	statSampleRate = flag.Duration("statSampleRate", 100*time.Millisecond, "Sample rate to capture load stats")
+	statServer     = flag.String("statServer", "", "InfluxDB instance to store stats for this server, e.g. example.com:8086")
+	statReporters  = flag.Int("statReporters", 4, "Number of workers to report stats")
+	statFlushRate  = flag.Duration("statFlushRate", time.Second, "Rate at which to report stats")
+	statDb         = flag.String("statDatabase", "chasmd", "Name of database for reported stats")
+	statSeriesKey  = flag.String("statSeriesKey", fmt.Sprintf("chasmd,pid=%d,type=http", os.Getpid()), "Series key for each stat point written")
+
+	wg      sync.WaitGroup
+	bufPool = sync.Pool{
+		New: func() interface{} {
+			// Just guessing on the initial buffer size here.
+			return bytes.NewBuffer(make([]byte, 0, 1024*16))
+		},
+	}
+	statPayloads chan *bytes.Buffer
+
+	mu  sync.Mutex
+	buf = bufPool.Get().(*bytes.Buffer)
+)
 
 func main() {
-	bind := flag.String("httpbind", "0.0.0.0:8086", "TCP bind address for HTTP server")
 	flag.Parse()
+	validateOptions()
+
+	statPayloads = make(chan *bytes.Buffer, *statReporters)
+	sk := []byte(*statSeriesKey)
+	bytesAccepted := river.Int{Name: []byte("bytes")}
+	linesAccepted := river.Int{Name: []byte("lines")}
+	reqsAccepted := river.Int{Name: []byte("reqs")}
+	fields := []river.Field{
+		&bytesAccepted,
+		&linesAccepted,
+		&reqsAccepted,
+	}
 
 	c := chasm.Config{
 		HTTPConfig: &chasm.HTTPConfig{
@@ -27,24 +65,49 @@ func main() {
 		logger.Fatal("Unexpected error:", err.Error())
 	}
 
+	spawnReporters(*statReporters)
+
 	s.Serve()
 	logger.Println("HTTP server listening on", s.HTTPURL)
 
 	ctrlC := make(chan os.Signal, 1)
 	signal.Notify(ctrlC, os.Interrupt)
 
-	statTicker := time.NewTicker(time.Second)
+	statReportTicker := time.NewTicker(*statFlushRate)
+	statSampleTicker := time.NewTicker(*statSampleRate)
 	for {
 		select {
 		case <-ctrlC:
+			flushBuffer()
 			shutdown(s)
-		case <-statTicker.C:
-			logger.Printf(
-				"http_requests_accepted=%d http_bytes_accepted=%d http_lines_accepted=%d\n",
-				s.HTTPRequestsAccepted(), s.HTTPBytesAccepted(), s.HTTPLinesAccepted(),
-			)
+		case <-statReportTicker.C:
+			flushBuffer()
+		case <-statSampleTicker.C:
+			stats := s.HTTPStats()
+			bytesAccepted.Value = int64(stats.BytesAccepted)
+			linesAccepted.Value = int64(stats.LinesAccepted)
+			reqsAccepted.Value = int64(stats.RequestsAccepted)
+
+			mu.Lock()
+			// Safe to discard this error because river.WriteLine would only return an error
+			// from writing to the io.Writer; and bytes.Buffer does not fail on writes.
+			_ = river.WriteLine(buf, sk, fields, time.Now().UnixNano())
+			mu.Unlock()
 		}
 	}
+}
+
+func validateOptions() {
+	if *statServer == "" {
+		logger.Fatalf("Required flag -statServer not provided")
+	}
+}
+
+func flushBuffer() {
+	mu.Lock()
+	statPayloads <- buf
+	buf = bufPool.Get().(*bytes.Buffer)
+	mu.Unlock()
 }
 
 func shutdown(s *chasm.Server) {
@@ -54,6 +117,8 @@ func shutdown(s *chasm.Server) {
 
 	go func() {
 		s.Close()
+		close(statPayloads)
+		wg.Wait()
 		done <- struct{}{}
 	}()
 
@@ -64,4 +129,27 @@ func shutdown(s *chasm.Server) {
 	}
 
 	os.Exit(0)
+}
+
+func spawnReporters(n int) {
+	c := avalanche.HTTPWriterConfig{
+		Host:     "http://" + *statServer,
+		Database: *statDb,
+	}
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		w := avalanche.NewHTTPWriter(c)
+		go report(w)
+	}
+}
+
+func report(w avalanche.LineProtocolWriter) {
+	for buf := range statPayloads {
+		if _, err := w.WriteLineProtocol(buf.Bytes()); err != nil {
+			logger.Printf("Error writing stats: %s", err.Error())
+		}
+		bufPool.Put(buf)
+	}
+
+	wg.Done()
 }
