@@ -4,6 +4,7 @@ package avalanche
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/valyala/fasthttp"
 )
@@ -40,14 +41,18 @@ func NewHTTPWriter(c HTTPWriterConfig) LineProtocolWriter {
 var post = []byte("POST")
 
 // WriteLineProtocol writes the given byte slice to the HTTP server described in the Writer's HTTPWriterConfig.
-func (w *HTTPWriter) WriteLineProtocol(body []byte) error {
+// It returns the latency in nanoseconds and any error received while sending the data over HTTP,
+// or it returns a new error if the HTTP response isn't as expected.
+func (w *HTTPWriter) WriteLineProtocol(body []byte) (int64, error) {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethodBytes(post)
 	req.Header.SetRequestURIBytes(w.url)
 	req.SetBody(body)
 
 	resp := fasthttp.AcquireResponse()
+	start := time.Now()
 	err := w.client.Do(req, resp)
+	lat := time.Since(start).Nanoseconds()
 	if err == nil {
 		sc := resp.StatusCode()
 		if sc != fasthttp.StatusNoContent {
@@ -58,5 +63,5 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte) error {
 	fasthttp.ReleaseResponse(resp)
 	fasthttp.ReleaseRequest(req)
 
-	return err
+	return lat, err
 }

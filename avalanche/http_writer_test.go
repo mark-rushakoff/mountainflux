@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/mark-rushakoff/mountainflux/avalanche"
 )
@@ -32,8 +33,15 @@ func TestHTTPWriter_Write(t *testing.T) {
 	}
 	w := avalanche.NewHTTPWriter(c)
 
-	if err := w.WriteLineProtocol(line); err != nil {
+	start := time.Now()
+	lat, err := w.WriteLineProtocol(line)
+	outerLat := time.Since(start).Nanoseconds()
+	if err != nil {
 		t.Fatalf("expected no error, got: %s", err.Error())
+	}
+
+	if lat == 0 || outerLat <= lat {
+		t.Fatalf("expected 0 < lat < %d, got: %d", outerLat, lat)
 	}
 
 	if lastReq != string(line) {

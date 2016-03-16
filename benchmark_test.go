@@ -30,7 +30,7 @@ func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		if err := w.WriteLineProtocol(lines); err != nil {
+		if _, err := w.WriteLineProtocol(lines); err != nil {
 			b.Fatalf("expected no error, got %s", err.Error())
 		}
 		b.SetBytes(int64(len(lines)))
