@@ -59,6 +59,7 @@ func benchmarkPointsWithTypes(b *testing.B, useBool, useInt, useFloat, useString
 	}
 
 	var cw CountingWriter
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if useBool {
 			boolField.Value = lights[i&0x01]
