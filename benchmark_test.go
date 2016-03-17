@@ -33,18 +33,20 @@ func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
 		if _, err := w.WriteLineProtocol(lines); err != nil {
 			b.Fatalf("expected no error, got %s", err.Error())
 		}
-		b.SetBytes(int64(len(lines)))
-
 		expBytes += uint64(len(lines))
-		if n := s.HTTPBytesAccepted(); n != expBytes {
+		expLines += uint64(numLines)
+
+		stats := s.HTTPStats()
+
+		if n := stats.BytesAccepted; n != expBytes {
 			b.Fatalf("bytes accepted: exp %d, got %d", expBytes, n)
 		}
 
-		expLines += uint64(numLines)
-		if l := s.HTTPLinesAccepted(); l != expLines {
+		if l := stats.LinesAccepted; l != expLines {
 			b.Fatalf("lines accepted: exp %d, got %d", expLines, l)
 		}
 	}
+	b.SetBytes(int64(expBytes))
 }
 
 func BenchmarkHTTPSmallPoints1(b *testing.B)     { benchmarkHTTPSmallPoints(1, b) }

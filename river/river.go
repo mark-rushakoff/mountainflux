@@ -2,62 +2,49 @@
 package river
 
 import (
-	"bytes"
-	"fmt"
 	"io"
-	"sort"
 	"strconv"
 )
 
-// SeriesKey is a non-optimized way to create a series key for the line protocol,
-// i.e. a measurement with tag keys and values.
-func SeriesKey(measurement string, tags map[string]string) []byte {
-	var b bytes.Buffer
-	b.WriteString(measurement)
-
-	keys := make([]string, 0, len(tags))
-	for k := range tags {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		b.WriteByte(',')
-
-		b.WriteString(k)
-		b.WriteByte('=')
-		b.WriteString(tags[k])
-	}
-
-	return b.Bytes()
-}
+var (
+	space = []byte(" ")
+	comma = []byte(",")
+)
 
 // WriteLine writes the line represented by seriesKey, fields, and time, to w.
 // Returns any error returned during write.
 func WriteLine(w io.Writer, seriesKey []byte, fields []Field, time int64) error {
-	var buf bytes.Buffer // TODO: use sync.pool?
+	// Series key of form `cpu,host=h1,region=west`
+	if _, err := w.Write(seriesKey); err != nil {
+		return err
+	}
 
-	buf.Write(seriesKey)
-	buf.WriteByte(' ')
+	// Space before fields
+	if _, err := w.Write(space); err != nil {
+		return err
+	}
 
-	for i, f := range fields {
+	for i, field := range fields {
+		// Leading comma on every field except the first.
 		if i != 0 {
-			buf.WriteByte(',')
+			if _, err := w.Write(comma); err != nil {
+				return err
+			}
 		}
 
-		f.writeToBuf(&buf)
+		// Write out the field, of form abc=xyz.
+		field.WriteTo(w)
 	}
-	buf.WriteByte(' ')
 
 	// Timestamp in nanoseconds, formatted in base 10, should fit in exactly 19 bytes for the foreseeable future.
-	// Plus one byte for the trailing newline.
-	tsBuf := make([]byte, 0, 20)
+	// Plus one byte for the leading space, plus one for the trailing newline.
+	tsBuf := make([]byte, 1, 21)
+	tsBuf[0] = ' '
 	tsBuf = strconv.AppendInt(tsBuf, time, 10)
 	tsBuf = append(tsBuf, '\n')
-	buf.Write(tsBuf)
 
-	if _, err := io.Copy(w, &buf); err != nil {
-		return fmt.Errorf("Error writing line: %s", err.Error())
+	if _, err := w.Write(tsBuf); err != nil {
+		return err
 	}
 
 	return nil

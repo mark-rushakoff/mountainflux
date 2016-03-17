@@ -1,15 +1,23 @@
 package river
 
 import (
-	"bytes"
+	"io"
 	"strconv"
 )
 
 // Field represents an InfluxDB field to be serialized by river.WriteLine.
 // The Bool, Int, Float, and String types implement this interface.
-type Field interface {
-	writeToBuf(*bytes.Buffer)
-}
+//
+// Implementers of Field should print out the key=value portion of the field.
+// river.WriteLine will take care of the rest of commas and spaces.
+type Field io.WriterTo
+
+var (
+	_ Field = Bool{}
+	_ Field = Int{}
+	_ Field = Float{}
+	_ Field = String{}
+)
 
 // Bool represents a boolean InfluxDB field.
 type Bool struct {
@@ -18,18 +26,25 @@ type Bool struct {
 }
 
 var (
-	eqTrue  = []byte("=T")
-	eqFalse = []byte("=F")
+	equalSign = []byte("=")
+	eqTrue    = []byte("=T")
+	eqFalse   = []byte("=F")
 )
 
-func (b Bool) writeToBuf(buf *bytes.Buffer) {
-	buf.Write(b.Name)
-
-	if b.Value {
-		buf.Write(eqTrue)
-	} else {
-		buf.Write(eqFalse)
+func (b Bool) WriteTo(w io.Writer) (int64, error) {
+	if n, err := w.Write(b.Name); err != nil {
+		return int64(n), err
 	}
+
+	var eqVal []byte
+	if b.Value {
+		eqVal = eqTrue
+	} else {
+		eqVal = eqFalse
+	}
+
+	n, err := w.Write(eqVal)
+	return int64(n), err
 }
 
 // Int represents an integer InfluxDB field.
@@ -38,8 +53,10 @@ type Int struct {
 	Value int64
 }
 
-func (i Int) writeToBuf(buf *bytes.Buffer) {
-	buf.Write(i.Name)
+func (i Int) WriteTo(w io.Writer) (int64, error) {
+	if n, err := w.Write(i.Name); err != nil {
+		return int64(n), err
+	}
 
 	// Max int64 fits in 19 base-10 digits;
 	// plus 1 for the leading =, plus 1 for the trailing i required for ints.
@@ -48,7 +65,8 @@ func (i Int) writeToBuf(buf *bytes.Buffer) {
 	iBuf = strconv.AppendInt(iBuf, i.Value, 10)
 	iBuf = append(iBuf, 'i')
 
-	buf.Write(iBuf)
+	n, err := w.Write(iBuf)
+	return int64(n), err
 }
 
 // Float represents a floating point InfluxDB field.
@@ -57,14 +75,17 @@ type Float struct {
 	Value float64
 }
 
-func (f Float) writeToBuf(buf *bytes.Buffer) {
-	buf.Write(f.Name)
-	buf.WriteByte('=')
+func (f Float) WriteTo(w io.Writer) (int64, error) {
+	if n, err := w.Write(f.Name); err != nil {
+		return int64(n), err
+	}
 
-	// Max int64 fits in 19 base-10 digits
-	var fBuf []byte
+	// Taking a total guess here at what size a float might fit in
+	var fBuf = make([]byte, 1, 32)
+	fBuf[0] = '='
 	fBuf = strconv.AppendFloat(fBuf, f.Value, 'f', -1, 64)
-	buf.Write(fBuf)
+	n, err := w.Write(fBuf)
+	return int64(n), err
 }
 
 // String represents a string InfluxDB field.
@@ -73,8 +94,13 @@ type String struct {
 	Value []byte
 }
 
-func (s String) writeToBuf(buf *bytes.Buffer) {
-	buf.Write(s.Name)
-	buf.WriteByte('=')
-	buf.Write(s.Value)
+func (s String) WriteTo(w io.Writer) (int64, error) {
+	if n, err := w.Write(s.Name); err != nil {
+		return int64(n), err
+	}
+	if n, err := w.Write(equalSign); err != nil {
+		return int64(n), err
+	}
+	n, err := w.Write(s.Value)
+	return int64(n), err
 }

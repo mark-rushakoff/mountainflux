@@ -29,10 +29,7 @@ func TestRiver_WriteLine(t *testing.T) {
 	}
 }
 
-func BenchmarkRiver_WriteLine(b *testing.B) {
-	var buf bytes.Buffer
-	buf.Grow(1024 * 1024)
-
+func benchmarkPointsWithTypes(b *testing.B, useBool, useInt, useFloat, useString bool) {
 	// Build up the series key just once
 	sk := []byte("rooms,building=b1,room=r1")
 
@@ -47,17 +44,68 @@ func BenchmarkRiver_WriteLine(b *testing.B) {
 	stringField := river.String{Name: []byte("meeting_name")}
 
 	// Hold collection of fields for later call to WriteLine
-	fields := []river.Field{&boolField, &intField, &floatField, &stringField}
-
-	for i := 0; i < b.N; i++ {
-		boolField.Value = lights[i&0x01]
-		intField.Value = int64(i)
-		floatField.Value = float64(i) * 2.5
-		stringField.Value = names[i&0x03]
-
-		river.WriteLine(&buf, sk, fields, time.Now().UnixNano())
-
-		b.SetBytes(int64(buf.Len()))
-		buf.Reset()
+	fields := make([]river.Field, 0, 4)
+	if useBool {
+		fields = append(fields, &boolField)
 	}
+	if useInt {
+		fields = append(fields, &intField)
+	}
+	if useFloat {
+		fields = append(fields, &floatField)
+	}
+	if useString {
+		fields = append(fields, &stringField)
+	}
+
+	var cw CountingWriter
+	for i := 0; i < b.N; i++ {
+		if useBool {
+			boolField.Value = lights[i&0x01]
+		}
+		if useInt {
+			intField.Value = int64(i)
+		}
+		if useFloat {
+			floatField.Value = float64(i) * 2.5
+		}
+		if useString {
+			stringField.Value = names[i&0x03]
+		}
+
+		river.WriteLine(&cw, sk, fields, time.Now().UnixNano())
+	}
+
+	b.SetBytes(cw.N)
+}
+
+///////////////////////////// bool, int, float, string
+
+func BenchmarkRiver_WriteLine_EachType(b *testing.B) {
+	benchmarkPointsWithTypes(b, true, true, true, true)
+}
+
+func BenchmarkRiver_WriteLine_JustBool(b *testing.B) {
+	benchmarkPointsWithTypes(b, true, false, false, false)
+}
+
+func BenchmarkRiver_WriteLine_JustInt(b *testing.B) {
+	benchmarkPointsWithTypes(b, false, true, false, false)
+}
+
+func BenchmarkRiver_WriteLine_JustFloat(b *testing.B) {
+	benchmarkPointsWithTypes(b, false, false, true, false)
+}
+
+func BenchmarkRiver_WriteLine_JustString(b *testing.B) {
+	benchmarkPointsWithTypes(b, false, false, false, true)
+}
+
+type CountingWriter struct {
+	N int64
+}
+
+func (w *CountingWriter) Write(b []byte) (int, error) {
+	w.N += int64(len(b))
+	return len(b), nil
 }
