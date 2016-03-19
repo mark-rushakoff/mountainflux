@@ -127,6 +127,11 @@ func scan(linesPerBatch int) {
 		logger.Fatalf("Error reading input: %s", err.Error())
 	}
 
+	// Finished reading input, make sure last batch goes out.
+	if n > 0 {
+		batchChan <- buf
+	}
+
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 }
