@@ -38,13 +38,17 @@ func NewHTTPWriter(c HTTPWriterConfig) LineProtocolWriter {
 	}
 }
 
-var post = []byte("POST")
+var (
+	post      = []byte("POST")
+	textPlain = []byte("text/plain")
+)
 
 // WriteLineProtocol writes the given byte slice to the HTTP server described in the Writer's HTTPWriterConfig.
 // It returns the latency in nanoseconds and any error received while sending the data over HTTP,
 // or it returns a new error if the HTTP response isn't as expected.
 func (w *HTTPWriter) WriteLineProtocol(body []byte) (int64, error) {
 	req := fasthttp.AcquireRequest()
+	req.Header.SetContentTypeBytes(textPlain)
 	req.Header.SetMethodBytes(post)
 	req.Header.SetRequestURIBytes(w.url)
 	req.SetBody(body)

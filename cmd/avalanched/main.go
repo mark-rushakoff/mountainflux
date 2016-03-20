@@ -78,10 +78,12 @@ func main() {
 
 	// One goroutine to periodically flush stats.
 	statsWg.Add(1)
-	go recordStats(avalanche.NewHTTPWriter(avalanche.HTTPWriterConfig{
+	statConfig := avalanche.HTTPWriterConfig{
 		Host:     "http://" + *statsURL,
 		Database: *statsDatabase,
-	}))
+	}
+	go recordStats(avalanche.NewHTTPWriter(statConfig))
+	logger.Printf("Recording stats to %s with series key: %s\n", statConfig.Host, *statsKey)
 
 	// Start the requested number of workers to make write requests over HTTP.
 	c := avalanche.HTTPWriterConfig{
