@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"text/template"
+
+	"github.com/mark-rushakoff/mountainflux/chasm"
 )
 
 const sampleConfigText = `[http]
@@ -24,7 +26,7 @@ database = "chasmd"
 # TODO: Add env function
 series-key = "chasmd,pid={{pid}}"
 
-# How may stats to collect before sending
+# How many stats to collect before sending
 batch-size = 100
 
 # How many workers to report stats
@@ -32,8 +34,8 @@ workers = 4
 `
 
 type chasmConfig struct {
-	HTTP  httpConfig  `toml:"http,omitempty"`
-	Stats statsConfig `toml:"stats,omitempty"`
+	HTTP  chasm.HTTPConfig `toml:"http"`
+	Stats statsConfig      `toml:"stats,omitempty"`
 }
 
 type httpConfig struct {

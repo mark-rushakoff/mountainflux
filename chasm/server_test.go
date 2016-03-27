@@ -20,7 +20,7 @@ var httpTests = []struct {
 }
 
 func TestServer_HTTPWrite(t *testing.T) {
-	s, err := chasm.NewServer(chasm.Config{
+	s, serverStats, err := chasm.NewServer(chasm.Config{
 		HTTPConfig: &chasm.HTTPConfig{
 			Bind: "localhost:0",
 		},
@@ -29,6 +29,11 @@ func TestServer_HTTPWrite(t *testing.T) {
 		t.Fatalf("exp no error, got: %s", err.Error())
 	}
 	s.Serve()
+	go func() {
+		for range serverStats {
+			// Nothing, just consume the channel.
+		}
+	}()
 	defer s.Close()
 
 	c := &http.Client{}

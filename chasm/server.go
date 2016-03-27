@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"net"
 	"sync"
-	"sync/atomic"
+	"time"
 
 	"github.com/valyala/fasthttp"
 )
@@ -18,7 +18,7 @@ type Config struct {
 // HTTPConfig describes the configuration for an HTTP server.
 type HTTPConfig struct {
 	// TCP address to listen to, e.g. `:8086` or `0.0.0.0:8086`
-	Bind string
+	Bind string `toml:"bind"`
 }
 
 // Server is a fake InfluxDB server.
@@ -27,31 +27,32 @@ type Server struct {
 	// e.g. "http://example.com:8086"
 	HTTPURL string
 
-	httpListener         net.Listener
-	httpRequestsAccepted uint64
-	httpLinesAccepted    uint64
-	httpBytesAccepted    uint64
+	httpListener net.Listener
+
+	stats chan Stats
 
 	wg   sync.WaitGroup
 	quit chan struct{}
 }
 
-// NewServer returns a new Server based on the supplied Config.
-func NewServer(c Config) (*Server, error) {
+// NewServer returns a new Server based on the supplied Config, and a channel from which stats will be sent.
+// The caller of NewServer *must* read from that channel, or the server will eventually block due to the channel being full.
+func NewServer(c Config) (*Server, <-chan Stats, error) {
 	s := &Server{
-		quit: make(chan struct{}),
+		stats: make(chan Stats, 1024), // Size of 1024 arbitrarily picked
+		quit:  make(chan struct{}),
 	}
 
 	if c.HTTPConfig != nil {
 		var err error
 		s.httpListener, err = net.Listen("tcp", c.HTTPConfig.Bind)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		s.HTTPURL = "http://" + s.httpListener.Addr().String()
 	}
 
-	return s, nil
+	return s, s.stats, nil
 }
 
 // Serve starts all the configured sub-servers in their own goroutines.
@@ -63,25 +64,27 @@ func (s *Server) Serve() {
 }
 
 // Close attempts to gracefully shutdown all the started sub-servers.
+// It also closes the channel returned from NewServer.
 func (s *Server) Close() {
 	close(s.quit)
 	s.wg.Wait()
+	close(s.stats)
 }
 
-// Stats contains information about the load the server has accepted.
+// Stats contains information about a request the server has accepted.
 type Stats struct {
-	RequestsAccepted uint64
-	BytesAccepted    uint64
-	LinesAccepted    uint64
-}
+	// How many bytes were in the request.
+	BytesAccepted int
 
-// HTTPStats returns stats for the HTTP server contained in this Server.
-func (s *Server) HTTPStats() Stats {
-	return Stats{
-		RequestsAccepted: atomic.LoadUint64(&s.httpRequestsAccepted),
-		BytesAccepted:    atomic.LoadUint64(&s.httpBytesAccepted),
-		LinesAccepted:    atomic.LoadUint64(&s.httpLinesAccepted),
-	}
+	// How many lines were in the request.
+	LinesAccepted int
+
+	// The time to read the request and prepare the response.
+	// Does not include time writing the response to the wire.
+	IngestLatency int64
+
+	// Unix time that stat was recorded, in nanoseconds.
+	Time int64
 }
 
 func (s *Server) serveHTTP() {
@@ -93,7 +96,9 @@ func (s *Server) serveHTTP() {
 		Handler: s.fasthttpHandler,
 	}
 
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		err := fastServer.Serve(s.httpListener)
 		if err != nil {
 			// TODO: Log the error? Restart the server?
@@ -114,7 +119,6 @@ var (
 )
 
 func (s *Server) fasthttpHandler(ctx *fasthttp.RequestCtx) {
-	atomic.AddUint64(&s.httpRequestsAccepted, 1)
 	if !bytes.Equal(ctx.Path(), writePath) {
 		ctx.Response.SetStatusCode(fasthttp.StatusNotFound)
 		return
@@ -131,8 +135,13 @@ func (s *Server) fasthttpHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	body := ctx.PostBody()
-	atomic.AddUint64(&s.httpBytesAccepted, uint64(len(body)))
-	atomic.AddUint64(&s.httpLinesAccepted, uint64(bytes.Count(body, lineDelimiter)))
 	ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
+
+	body := ctx.PostBody()
+	s.stats <- Stats{
+		BytesAccepted: len(body),
+		LinesAccepted: bytes.Count(body, lineDelimiter),
+		IngestLatency: time.Since(ctx.ConnTime()).Nanoseconds(),
+		Time:          time.Now().UnixNano(),
+	}
 }

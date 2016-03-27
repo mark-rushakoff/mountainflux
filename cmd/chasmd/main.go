@@ -17,18 +17,12 @@ import (
 )
 
 var (
+	cfg chasmConfig
+
 	logger = log.New(os.Stdout, "[chasmd] ", log.LstdFlags)
 
 	configPath   = flag.String("config", "chasmd.toml", "Path to chasmd configuration file")
 	sampleConfig = flag.Bool("sample-config", false, "If set, print out sample configuration and exit")
-
-	bind           = flag.String("httpbind", "0.0.0.0:8086", "TCP bind address for chasm HTTP server")
-	statSampleRate = flag.Duration("statSampleRate", 100*time.Millisecond, "Sample rate to capture load stats")
-	statServer     = flag.String("statServer", "", "InfluxDB instance to store stats for this server, e.g. example.com:8086")
-	statReporters  = flag.Int("statReporters", 4, "Number of workers to report stats")
-	statFlushRate  = flag.Duration("statFlushRate", time.Second, "Rate at which to report stats")
-	statDb         = flag.String("statDatabase", "chasmd", "Name of database for reported stats")
-	statSeriesKey  = flag.String("statSeriesKey", fmt.Sprintf("chasmd,pid=%d,type=http", os.Getpid()), "Series key for each stat point written")
 
 	wg      sync.WaitGroup
 	bufPool = sync.Pool{
@@ -38,9 +32,6 @@ var (
 		},
 	}
 	statPayloads chan *bytes.Buffer
-
-	mu  sync.Mutex
-	buf = bufPool.Get().(*bytes.Buffer)
 )
 
 func main() {
@@ -56,37 +47,33 @@ func main() {
 		logger.Fatalf(err.Error())
 	}
 
-	var cfg chasmConfig
 	if err := toml.NewDecoder(f).Decode(&cfg); err != nil {
 		logger.Fatalf(err.Error())
 	}
 	cfg.Stats.FinalizeSeriesKey()
+	logger.Println("Recording stats with series key:", cfg.Stats.SeriesKey)
 
-	validateOptions()
-
-	statPayloads = make(chan *bytes.Buffer, *statReporters)
-	sk := []byte(*statSeriesKey)
-	bytesAccepted := river.Int{Name: []byte("bytes")}
-	linesAccepted := river.Int{Name: []byte("lines")}
-	reqsAccepted := river.Int{Name: []byte("reqs")}
-	fields := []river.Field{
-		&bytesAccepted,
-		&linesAccepted,
-		&reqsAccepted,
+	if cfg.Stats.NumWorkers <= 0 {
+		logger.Fatalf("stats.workers must be > 0")
 	}
+
+	statPayloads = make(chan *bytes.Buffer, cfg.Stats.NumWorkers)
 
 	c := chasm.Config{
 		HTTPConfig: &chasm.HTTPConfig{
-			Bind: *bind,
+			Bind: cfg.HTTP.Bind,
 		},
 	}
 
-	s, err := chasm.NewServer(c)
+	s, serverStats, err := chasm.NewServer(c)
 	if err != nil {
 		logger.Fatal("Unexpected error:", err.Error())
 	}
 
-	spawnReporters(*statReporters)
+	wg.Add(1)
+	go collectServerStats(serverStats)
+
+	spawnStatWorkers()
 
 	s.Serve()
 	logger.Println("HTTP server listening on", s.HTTPURL)
@@ -94,41 +81,54 @@ func main() {
 	ctrlC := make(chan os.Signal, 1)
 	signal.Notify(ctrlC, os.Interrupt)
 
-	statReportTicker := time.NewTicker(*statFlushRate)
-	statSampleTicker := time.NewTicker(*statSampleRate)
-	for {
-		select {
-		case <-ctrlC:
-			flushBuffer()
-			shutdown(s)
-		case <-statReportTicker.C:
-			flushBuffer()
-		case <-statSampleTicker.C:
-			stats := s.HTTPStats()
-			bytesAccepted.Value = int64(stats.BytesAccepted)
-			linesAccepted.Value = int64(stats.LinesAccepted)
-			reqsAccepted.Value = int64(stats.RequestsAccepted)
+	select {
+	case <-ctrlC:
+		shutdown(s)
+	}
+}
 
-			mu.Lock()
-			// Safe to discard this error because river.WriteLine would only return an error
-			// from writing to the io.Writer; and bytes.Buffer does not fail on writes.
-			_ = river.WriteLine(buf, sk, fields, time.Now().UnixNano())
-			mu.Unlock()
+// collectServerStats is intended to be run in a single goroutine.
+// Collects stats from the server into batches and sends off to stat reporters.
+func collectServerStats(serverStats <-chan chasm.Stats) {
+	buf := bufPool.Get().(*bytes.Buffer)
+	curLines := 0
+	maxLines := cfg.Stats.BatchSize
+
+	sk := []byte(cfg.Stats.SeriesKey)
+	bytesAccepted := river.Int{Name: []byte("bytes")}
+	ingestLatency := river.Int{Name: []byte("ingestLatNs")}
+	linesAccepted := river.Int{Name: []byte("lines")}
+	fields := []river.Field{
+		&bytesAccepted,
+		&ingestLatency,
+		&linesAccepted,
+	}
+
+	for stats := range serverStats {
+		bytesAccepted.Value = int64(stats.BytesAccepted)
+		ingestLatency.Value = int64(stats.IngestLatency)
+		linesAccepted.Value = int64(stats.LinesAccepted)
+
+		// Safe to discard this error because river.WriteLine would only return an error
+		// from writing to the io.Writer; and bytes.Buffer does not fail on writes.
+		_ = river.WriteLine(buf, sk, fields, stats.Time)
+
+		curLines++
+		if curLines >= maxLines {
+			statPayloads <- buf
+			curLines = 0
+			buf = bufPool.Get().(*bytes.Buffer)
 		}
 	}
-}
 
-func validateOptions() {
-	if *statServer == "" {
-		logger.Fatalf("Required flag -statServer not provided")
+	// serverStats was closed. May need one last flush.
+	if curLines > 0 {
+		statPayloads <- buf
 	}
-}
 
-func flushBuffer() {
-	mu.Lock()
-	statPayloads <- buf
-	buf = bufPool.Get().(*bytes.Buffer)
-	mu.Unlock()
+	close(statPayloads)
+
+	wg.Done()
 }
 
 func shutdown(s *chasm.Server) {
@@ -138,7 +138,6 @@ func shutdown(s *chasm.Server) {
 
 	go func() {
 		s.Close()
-		close(statPayloads)
 		wg.Wait()
 		done <- struct{}{}
 	}()
@@ -152,13 +151,13 @@ func shutdown(s *chasm.Server) {
 	os.Exit(0)
 }
 
-func spawnReporters(n int) {
+func spawnStatWorkers() {
 	c := avalanche.HTTPWriterConfig{
-		Host:     "http://" + *statServer,
-		Database: *statDb,
+		Host:     cfg.Stats.Host,
+		Database: cfg.Stats.Database,
 	}
-	wg.Add(n)
-	for i := 0; i < n; i++ {
+	wg.Add(cfg.Stats.NumWorkers)
+	for i := 0; i < cfg.Stats.NumWorkers; i++ {
 		w := avalanche.NewHTTPWriter(c)
 		go report(w)
 	}
@@ -169,6 +168,8 @@ func report(w avalanche.LineProtocolWriter) {
 		if _, err := w.WriteLineProtocol(buf.Bytes()); err != nil {
 			logger.Printf("Error writing stats: %s", err.Error())
 		}
+
+		buf.Reset()
 		bufPool.Put(buf)
 	}
 

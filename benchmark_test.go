@@ -9,7 +9,7 @@ import (
 )
 
 func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
-	s, err := chasm.NewServer(chasm.Config{
+	s, serverStats, err := chasm.NewServer(chasm.Config{
 		HTTPConfig: &chasm.HTTPConfig{
 			Bind: "localhost:0",
 		},
@@ -18,6 +18,11 @@ func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
 		b.Fatal(err)
 	}
 	s.Serve()
+	go func() {
+		for range serverStats {
+			// Nothing, just consume the channel.
+		}
+	}()
 	defer s.Close()
 
 	lines := bytes.Repeat([]byte("cpu,host=h1 usage=99\n"), numLines)
@@ -26,7 +31,7 @@ func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
 		Database: "d",
 	})
 
-	var expBytes, expLines uint64
+	var expBytes uint64
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -34,17 +39,6 @@ func benchmarkHTTPSmallPoints(numLines int, b *testing.B) {
 			b.Fatalf("expected no error, got %s", err.Error())
 		}
 		expBytes += uint64(len(lines))
-		expLines += uint64(numLines)
-
-		stats := s.HTTPStats()
-
-		if n := stats.BytesAccepted; n != expBytes {
-			b.Fatalf("bytes accepted: exp %d, got %d", expBytes, n)
-		}
-
-		if l := stats.LinesAccepted; l != expLines {
-			b.Fatalf("lines accepted: exp %d, got %d", expLines, l)
-		}
 	}
 	b.SetBytes(int64(expBytes))
 }
