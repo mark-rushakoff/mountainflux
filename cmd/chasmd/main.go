@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/influxdata/toml"
 	"github.com/mark-rushakoff/mountainflux/avalanche"
 	"github.com/mark-rushakoff/mountainflux/chasm"
 	"github.com/mark-rushakoff/mountainflux/river"
@@ -17,6 +18,9 @@ import (
 
 var (
 	logger = log.New(os.Stdout, "[chasmd] ", log.LstdFlags)
+
+	configPath   = flag.String("config", "chasmd.toml", "Path to chasmd configuration file")
+	sampleConfig = flag.Bool("sample-config", false, "If set, print out sample configuration and exit")
 
 	bind           = flag.String("httpbind", "0.0.0.0:8086", "TCP bind address for chasm HTTP server")
 	statSampleRate = flag.Duration("statSampleRate", 100*time.Millisecond, "Sample rate to capture load stats")
@@ -41,6 +45,23 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if *sampleConfig {
+		fmt.Println(sampleConfigText)
+		os.Exit(0)
+	}
+
+	f, err := os.Open(*configPath)
+	if err != nil {
+		logger.Fatalf(err.Error())
+	}
+
+	var cfg chasmConfig
+	if err := toml.NewDecoder(f).Decode(&cfg); err != nil {
+		logger.Fatalf(err.Error())
+	}
+	cfg.Stats.FinalizeSeriesKey()
+
 	validateOptions()
 
 	statPayloads = make(chan *bytes.Buffer, *statReporters)
